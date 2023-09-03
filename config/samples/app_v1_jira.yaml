@@ -1,0 +1,51 @@
+apiVersion: app.atlassian.com/v1
+kind: Jira
+metadata:
+  labels:
+    app.kubernetes.io/name: jira
+    app.kubernetes.io/instance: jira-sample
+  name: jira-clone
+spec:
+  awsRegion: ap-southeast-2
+  retainOnDelete: true
+  hostname: test-clone-apse2.itplatdev.atlassian.com
+  kmsKeyId: 069a2a74-a9c7-46f2-a395-87c11c86a5e1
+  sharedFs:
+    snapshotId: snap-0de48debdaa7df9fd
+    volumeSize: 2
+  database:
+    dBInstanceClass: db.t3.small
+    allocatedStorage: 20
+    engine: postgres
+    engineVersion: "12.14"
+    snapshotId: dr-k8testj-usw220220720041422013600000001-snap-202308300052
+  network:
+    securityGroupIds:
+      - sg-01e10efcbee989dc5
+    subnetIds:
+      - subnet-0a40d9ed72c1504be
+      - subnet-021a6490249d5fd60
+      - subnet-0db32574128feec29
+  argocd:
+    retainOnDelete: false
+    namespace: argocd
+    project: default
+    syncPolicy:
+      autoSync: true
+      applyOutOfSyncOnly: true
+    helmChart:
+      repoUrl: https://atlassian.github.io/data-center-helm-charts
+      version: 1.15.3
+    helmValues:
+      gitRepo: https://bitbucket.org/atlassian/argo-values.git
+      gitRevision: dev
+      helmValuesFiles:
+        - $values/values/products/jira/stacks/k8spartez-usw2/values.yaml
+        - $values/values/products/jira/stacks/k8spartez-usw2/logging-values.yaml
+        - $values/values/products/jira/stacks/k8spartez-usw2/version.yaml
+        - $values/values/products/jira/stacks/k8spartez-usw2/additional-envs.yaml
+      valueOverrides: |
+        hello:
+          world:
+            foo: bar
+        myNewValue: isAwesomeAsHell

@@ -1,0 +1,27 @@
+# permissions for end users to view jiras.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: jira-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: jira-aio-operator
+    app.kubernetes.io/part-of: jira-aio-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: jira-viewer-role
+rules:
+- apiGroups:
+  - app.atlassian.com
+  resources:
+  - jiras
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - app.atlassian.com
+  resources:
+  - jiras/status
+  verbs:
+  - get

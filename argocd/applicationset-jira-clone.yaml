@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: jira-clone
+  namespace: argocd
+  ownerReferences:
+  - apiVersion: app.atlassian.com/v1
+    blockOwnerDeletion: true
+    kind: Jira
+    name: jira-clone
+    uid: 9e39938e-a051-426b-b934-ff67381aebdc
+spec:
+  generators:
+  - list:
+      elements:
+      - namespace: jira-clone
+  template:
+    metadata:
+      name: '{{ namespace }}'
+    spec:
+      project: default
+      syncPolicy:
+        syncOptions:
+        - ApplyOutOfSyncOnly=true
+        automated: {}
+      sources:
+        - chart: jira
+          repoURL: https://atlassian.github.io/data-center-helm-charts
+          targetRevision: 1.15.3
+          helm:
+            releaseName: '{{ namespace }}'
+            values: |
+                hello:
+                  world:
+                    foo: bar
+                myNewValue: isAwesomeAsHell
+                ingress:
+                    host: test-clone-apse2.itplatdev.atlassian.com
+                    annotations:
+                        'alb.ingress.kubernetes.io/certificate-arn': 'arn:aws:acm:ap-southeast-2:629205377521:certificate/7d398889-d2ed-42e4-94e7-16fded6498f1'
+                        'alb.ingress.kubernetes.io/healthcheck-path': '/status'
+                        'alb.ingress.kubernetes.io/listen-ports': '[{"HTTP": 80}, {"HTTPS": 443}]'
+                        'alb.ingress.kubernetes.io/scheme': 'internal'
+                        'alb.ingress.kubernetes.io/ssl-policy': 'ELBSecurityPolicy-FS-1-2-Res-2020-10'
+                        'alb.ingress.kubernetes.io/subnets': 'subnet-0a40d9ed72c1504be,subnet-021a6490249d5fd60,subnet-0db32574128feec29'
+                        'alb.ingress.kubernetes.io/tags': 'service_name=jira-clone,Name=jira-clone,business_unit=WorkplaceTechnology,resource_owner=mgibson'
+                        'alb.ingress.kubernetes.io/target-group-attributes': 'stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=43200'
+                        'alb.ingress.kubernetes.io/target-type': 'ip'
+                        'external-dns.alpha.kubernetes.io/hostname': 'test-clone-apse2.itplatdev.atlassian.com'
+            valueFiles:
+                - $values/values/products/jira/stacks/k8spartez-usw2/values.yaml
+                - $values/values/products/jira/stacks/k8spartez-usw2/logging-values.yaml
+                - $values/values/products/jira/stacks/k8spartez-usw2/version.yaml
+                - $values/values/products/jira/stacks/k8spartez-usw2/additional-envs.yaml
+        - repoURL: https://bitbucket.org/atlassian/argo-values.git
+          targetRevision: dev
+          ref: values
+      destination:
+        server: "https://kubernetes.default.svc"
+        namespace: '{{ namespace }}'

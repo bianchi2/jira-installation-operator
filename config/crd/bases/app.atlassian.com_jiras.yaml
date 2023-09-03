@@ -1,0 +1,163 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.11.1
+  creationTimestamp: null
+  name: jiras.app.atlassian.com
+spec:
+  group: app.atlassian.com
+  names:
+    kind: Jira
+    listKind: JiraList
+    plural: jiras
+    singular: jira
+  scope: Cluster
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Jira is the Schema for the jiras API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: JiraSpec defines the desired state of Jira
+            properties:
+              foo:
+                description: Foo is an example field of Jira. Edit jira_types.go to
+                  remove/update
+                type: string
+              awsRegion:
+                type: string
+              retainOnDelete:
+                type: boolean
+              hostname:
+                type: string
+              sharedFs:
+                type: object
+                properties:
+                  snapshotId:
+                    type: string
+                  volumeSize:
+                    type: integer
+                    default: 100
+                  nfsServerAvailabilityZone:
+                    type: string
+                    default: a
+                  efsStorageClassName:
+                    type: string
+                    default: efs-sc
+                  ebsStorageClassName:
+                    type: string
+                    default: gp2
+                  efsCsiDriverName:
+                    type: string
+                    default: efs.csi.aws.com
+              kmsKeyId:
+                type: string
+              database:
+                type: object
+                properties:
+                  dBInstanceClass:
+                    type: string
+                  allocatedStorage:
+                    type: integer
+                  engine:
+                    type: string
+                    default: postgres
+                  engineVersion:
+                    type: string
+                  snapshotId:
+                    type: string
+              network:
+                type: object
+                properties:
+                  securityGroupIds:
+                    type: array
+                    items:
+                      type: string
+                  subnetIds:
+                    type: array
+                    items:
+                      type: string
+              argocd:
+                type: object
+                properties:
+                  helmChart:
+                    type: object
+                    properties:
+                      repoUrl:
+                        type: string
+                      version:
+                        type: string
+                  helmValues:
+                    type: object
+                    properties:
+                      gitRepo:
+                        type: string
+                      gitRevision:
+                        type: string
+                      helmValuesFiles:
+                        type: array
+                        items:
+                          type: string
+                      valueOverrides:
+                        type: string
+                  namespace:
+                    type: string
+                    default: argocd
+                  project:
+                    type: string
+                    default: default
+                  syncPolicy:
+                    type: object
+                    properties:
+                      autoSync:
+                        type: boolean
+                      applyOutOfSyncOnly:
+                        type: boolean
+                  retainOnDelete:
+                    type: boolean
+
+
+            type: object
+          status:
+            description: JiraStatus defines the observed state of Jira
+            type: object
+            properties:
+              rds:
+                type: object
+                properties:
+                  endpoint:
+                    type: string
+                  liquibaseJobStatus:
+                    type: string
+                  resetRdsCredsJobStatus:
+                    type: string
+                  status:
+                    type: string
+
+              app:
+                type: object
+                properties:
+                  health:
+                    type: string
+                  sync:
+                    type: string
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,193 @@
+databaseChangeLog:
+  - changeSet:
+      id:  createUser
+      author:   itplateng
+      comment:  create the jira user if it doesn't already exist
+      runOnChange: true
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 0
+            sql: select count(usename) from pg_catalog.pg_user where pg_user.usename='${appUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  CREATE USER ${appUsername} WITH PASSWORD '${appPassword}';
+           stripComments:  true
+  - changeSet:
+      id:  alterUser
+      author:   itplateng
+      runOnChange: true
+      comment:  set the jira user password
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 1
+            sql: select count(usename) from pg_catalog.pg_user where pg_user.usename='${appUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  ALTER USER ${appUsername} WITH PASSWORD '${appPassword}';
+           stripComments:  true
+  - changeSet:
+      id:  createRole
+      author:   itplateng
+      comment:  create the jira role if it doesn't already exist
+      runOnChange: true
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 0
+            sql: select count(rolname) from pg_catalog.pg_roles where pg_roles.rolname='${appUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  CREATE ROLE ${appUsername};
+           stripComments:  true
+  - changeSet:
+      id:  grantRole
+      author:   itplateng
+      comment:  grant the jira role to postgres user so it can create the database with jira ownership. I don't have a good check for this and the call is idempotent.
+      runOnChange: true
+      runInTransaction: true
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  GRANT ${appUsername} to postgres;
+           stripComments:  true
+  - changeSet:
+      id:  createDatabase
+      author:   itplateng
+      comment:  create the jira database if it doesn't already exist
+      runOnChange: true
+      runInTransaction: false
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT count(datname) FROM pg_database where datname='jira';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  CREATE DATABASE jira WITH OWNER ${appUsername} ENCODING 'UNICODE' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;
+           stripComments:  true
+  - changeSet:
+      id:  grantAll
+      author:   itplateng
+      comment:  grant all privileges to the appUser
+      runOnChange: true
+      runInTransaction: false
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  GRANT ALL PRIVILEGES ON DATABASE jira TO ${appUsername};
+           stripComments:  true
+  - changeSet:
+      id:  createRoUser
+      author:   itplateng
+      comment:  create the read only jira user if it doesn't already exist
+      runOnChange: true
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 0
+            sql: select count(usename) from pg_catalog.pg_user where pg_user.usename='${appRoUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  CREATE USER "${appRoUsername}" WITH PASSWORD '${appRoPassword}';
+           stripComments:  true
+  - changeSet:
+      id:  alterRoUser
+      author:   itplateng
+      runAlways: true
+      comment:  set the read only jira user password
+      runOnChange: true
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 1
+            sql: select count(usename) from pg_catalog.pg_user where pg_user.usename='${appRoUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  ALTER USER "${appRoUsername}" WITH PASSWORD '${appRoPassword}';
+           stripComments:  true
+  - changeSet:
+      id:  createRoRole
+      author:   itplateng
+      comment:  create the read only jira role if it doesn't already exist
+      runOnChange: true
+      runInTransaction: true
+      preConditions:
+        - onFail: CONTINUE
+        - sqlCheck:
+            expectedResult: 0
+            sql: select count(rolname) from pg_catalog.pg_roles where pg_roles.rolname='${appRoUsername}';
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  CREATE ROLE "${appRoUsername}";
+           stripComments:  true
+  - changeSet:
+      id:  grantRoRole
+      author:   itplateng
+      comment:  grant the read only jira role to postgres user so it can create the database with jira ownership
+      runOnChange: true
+      runInTransaction: true
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  GRANT "${appRoUsername}" to postgres;
+           stripComments:  true
+  - changeSet:
+      id:  grantConnectToRoUser
+      author:   itplateng
+      comment:  grant connect and select privileges to the read only appUser
+      runOnChange: true
+      runInTransaction: false
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  GRANT CONNECT ON DATABASE jira TO "${appRoUsername}";
+           stripComments:  true
+  - changeSet:
+      id:  grantUsageToRoUser
+      author:   itplateng
+      comment:  grant usage privileges to the read only appUser
+      runOnChange: true
+      runInTransaction: false
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql: GRANT USAGE ON SCHEMA public TO "${appRoUsername}";
+           stripComments:  true
+  - changeSet:
+      id:  grantSelectToRoUser
+      author:   itplateng
+      comment:  grant select privileges for public schema to the read only appUser
+      runOnChange: true
+      runInTransaction: false
+      changes:
+        -  sql:
+           dbms:  'postgresql'
+           splitStatements:  true
+           sql:  GRANT SELECT ON ALL TABLES IN SCHEMA public TO "${appRoUsername}";
+           stripComments:  true
