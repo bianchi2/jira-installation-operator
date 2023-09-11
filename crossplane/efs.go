@@ -13,7 +13,7 @@ import (
 func GetMountTargets(jira appv1.Jira, filesystemId string, subnetId string, index string) (mountTarget efs.MountTarget) {
 	mountTargetResourceSpec := xpv1.ResourceSpec{
 		ProviderConfigReference: &v1.Reference{
-			Name: "crossplane-contrib-provider-aws",
+			Name: jira.Spec.CrossplaneAwsProviderName,
 		},
 	}
 	if jira.Spec.RetainOnDelete {
@@ -46,7 +46,7 @@ func GetFileSystem(jira appv1.Jira, namespace string) (sharedFileSystem efs.File
 			Namespace: namespace,
 		},
 		ProviderConfigReference: &v1.Reference{
-			Name: "crossplane-contrib-provider-aws",
+			Name: jira.Spec.CrossplaneAwsProviderName,
 		},
 	}
 

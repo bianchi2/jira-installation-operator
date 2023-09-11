@@ -26,8 +26,9 @@ func GetLiquibaseSecret(jira appv1.Jira, namespace, rdsHostname string, masterPa
 
 	liquibaseSecret = corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jira.Name + "-liquibase-properties-secret",
-			Namespace: namespace,
+			Name:            jira.Name + "-liquibase-properties-secret",
+			Namespace:       namespace,
+			OwnerReferences: GetOwnerReferences(jira),
 		},
 		Data: liquibaseSecretData,
 	}
@@ -43,8 +44,9 @@ func GetLiquibaseConfigMap(jira appv1.Jira, namespace string) (liquibaseConfigMa
 
 	liquibaseConfigMap = corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jira.Name + "-liquibase-changelog",
-			Namespace: namespace,
+			Name:            jira.Name + "-liquibase-changelog",
+			Namespace:       namespace,
+			OwnerReferences: GetOwnerReferences(jira),
 		},
 		Data: map[string]string{
 			"changelog.yml": string(configContent),
@@ -56,10 +58,10 @@ func GetLiquibaseConfigMap(jira appv1.Jira, namespace string) (liquibaseConfigMa
 func GetServiceAccount(jira appv1.Jira, namespace string) (serviceAccout corev1.ServiceAccount) {
 	serviceAccout = corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      jira.Name + "-rds-reset-sa",
+			Name:      "rds-reset-password-sa",
 			Namespace: namespace,
 			Annotations: map[string]string{
-				"eks.amazonaws.com/role-arn": "arn:aws:iam::629205377521:role/crossplane",
+				"eks.amazonaws.com/role-arn": jira.Spec.RdsRoleArn,
 			},
 		},
 	}
@@ -82,7 +84,7 @@ func GetChangeRootPasswordJob(jira appv1.Jira, namespace string, dbInstanceIdent
 					},
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: jira.Name + "-rds-reset-sa",
+					ServiceAccountName: GetServiceAccount(jira, namespace).Name,
 					Containers: []corev1.Container{{
 						Name:    "reset-creds",
 						Image:   "amazon/aws-cli:2.13.14",
@@ -94,7 +96,7 @@ func GetChangeRootPasswordJob(jira appv1.Jira, namespace string, dbInstanceIdent
 								ValueFrom: &corev1.EnvVarSource{
 									SecretKeyRef: &corev1.SecretKeySelector{
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: jira.Name + "-rds-master-password",
+											Name: "jira-database-secret",
 										},
 										Key: "password",
 									},
@@ -126,10 +128,10 @@ func GetLiquibaseJob(jira appv1.Jira, namespace string) (liquibaseJob batchv1.Jo
 				Spec: corev1.PodSpec{
 					Volumes: []corev1.Volume{
 						{
-							Name: "liquibase-properties-secret",
+							Name: "jira-database-secret",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: jira.Name + "-liquibase-properties-secret",
+									SecretName: "jira-database-secret",
 								},
 							},
 						},
@@ -156,7 +158,7 @@ func GetLiquibaseJob(jira appv1.Jira, namespace string) (liquibaseJob batchv1.Jo
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: jira.Name + "-liquibase-properties-secret",
+												Name: "jira-database-secret",
 											},
 											Key: "password",
 										},
@@ -167,7 +169,7 @@ func GetLiquibaseJob(jira appv1.Jira, namespace string) (liquibaseJob batchv1.Jo
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: jira.Name + "-liquibase-properties-secret",
+												Name: "jira-database-secret",
 											},
 											Key: "url",
 										},
@@ -176,7 +178,7 @@ func GetLiquibaseJob(jira appv1.Jira, namespace string) (liquibaseJob batchv1.Jo
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "liquibase-properties-secret",
+									Name:      "jira-database-secret",
 									MountPath: "/liquibase/changelog/properties",
 								},
 								{

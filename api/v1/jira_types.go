@@ -30,14 +30,31 @@ type DatabaseSpec struct {
 	EngineVersion    string `json:"engineVersion,omitempty"`
 	SnapshotID       string `json:"snapshotId,omitempty"`
 }
+type FsxSpec struct {
+	SnapshotId                 string `json:"snapshotId,omitempty"`
+	FsxRestoreStorageClassName string `json:"restoreStorageClassName,omitempty"`
+	FsxVolumeSnapshotClassName string `json:"volumeSnapshotClassName,omitempty"`
+
+	FsxCsiDriverName string `json:"csiDriverName,omitempty"`
+}
+
+type EfsSpec struct {
+	EfsStorageClassName string `json:"storageClassName,omitempty"`
+	EfsCsiDriverName    string `json:"csiDriverName,omitempty"`
+}
+
+type EbsSpec struct {
+	EbsStorageClassName string `json:"storageClassName,omitempty"`
+	EbsFsType           string `json:"fsType,omitempty"`
+	SnapshotId          string `json:"snapshotId,omitempty"`
+	AvailabilityZone    string `json:"availabilityZone,omitempty"`
+}
 
 type SharedFS struct {
-	SnapshotId                string `json:"snapshotId,omitempty"`
-	VolumeSize                int64  `json:"volumeSize,omitempty"`
-	NfsServerAvailabilityZone string `json:"nfsServerAvailabilityZone,omitempty"`
-	EfsStorageClassName       string `json:"efsStorageClassName,omitempty"`
-	EbsStorageClassName       string `json:"ebsStorageClassName,omitempty"`
-	EfsCsiDriverName          string `json:"efsCsiDriverName,omitempty"`
+	VolumeSize int64   `json:"volumeSize,omitempty"`
+	Ebs        EbsSpec `json:"ebs,omitempty"`
+	Efs        EfsSpec `json:"efs,omitempty"`
+	Fsx        FsxSpec `json:"fsx,omitempty"`
 }
 
 type HelmValues struct {
@@ -77,14 +94,16 @@ type JiraSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of Jira. Edit jira_types.go to remove/update
-	AWSRegion      string       `json:"awsRegion,omitempty"`
-	RetainOnDelete bool         `json:"retainOnDelete,omitempty"`
-	Database       DatabaseSpec `json:"database,omitempty"`
-	Hostname       string       `json:"hostname,omitempty"`
-	ArgoCD         ArgoCDSpec   `json:"argocd,omitempty"`
-	SharedFS       SharedFS     `json:"sharedFs,omitempty"`
-	Network        Network      `json:"network,omitempty"`
-	KMSKeyId       string       `json:"kmsKeyId,omitempty"`
+	AWSRegion                 string       `json:"awsRegion,omitempty"`
+	RetainOnDelete            bool         `json:"retainOnDelete,omitempty"`
+	Database                  DatabaseSpec `json:"database,omitempty"`
+	Hostname                  string       `json:"hostname,omitempty"`
+	CrossplaneAwsProviderName string       `json:"crossplaneAwsProviderName,omitempty"`
+	ArgoCD                    ArgoCDSpec   `json:"argocd,omitempty"`
+	SharedFS                  SharedFS     `json:"sharedFs,omitempty"`
+	Network                   Network      `json:"network,omitempty"`
+	KMSKeyId                  string       `json:"kmsKeyId,omitempty"`
+	RdsRoleArn                string       `json:"rdsRoleArn,omitempty"`
 }
 
 type RDSStatus struct {
@@ -99,10 +118,17 @@ type AppStatus struct {
 	Sync   string `json:"sync,omitempty"`
 }
 
+type SharedFilesystemStatus struct {
+	EfsId string `json:"efsId,omitempty"`
+	EbsId string `json:"ebsId,omitempty"`
+	FsxId string `json:"fsxId,omitempty"`
+}
+
 // JiraStatus defines the observed state of Jira
 type JiraStatus struct {
-	RDS       RDSStatus `json:"rds,omitempty"`
-	AppStatus AppStatus `json:"app,omitempty"`
+	RDS                    RDSStatus              `json:"rds,omitempty"`
+	AppStatus              AppStatus              `json:"app,omitempty"`
+	SharedFilesystemStatus SharedFilesystemStatus `json:"sharedFs,omitempty"`
 }
 
 //+kubebuilder:object:root=true

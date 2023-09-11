@@ -7,6 +7,7 @@ metadata:
   ownerReferences:
   - apiVersion: app.atlassian.com/v1
     blockOwnerDeletion: true
+    controller: true
     kind: Jira
     name: {{ .namespace }}
     uid: {{ .uid }}

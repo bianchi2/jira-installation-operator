@@ -25,7 +25,10 @@ import (
 	"github.com/atlassian-labs/jira-operator/k8s"
 	database "github.com/crossplane-contrib/provider-aws/apis/database/v1beta1"
 	ec2 "github.com/crossplane-contrib/provider-aws/apis/ec2/v1alpha1"
+	efs "github.com/crossplane-contrib/provider-aws/apis/efs/v1alpha1"
 	rds "github.com/crossplane-contrib/provider-aws/apis/rds/v1alpha1"
+	snapshot "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -54,7 +57,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	err := r.Get(ctx, req.NamespacedName, jira)
 	if err != nil {
 		logger.Info("Failed to get custom resource")
-		return ctrl.Result{RequeueAfter: time.Minute}, err
+		return ctrl.Result{}, nil
 	}
 
 	// create namespace
@@ -78,9 +81,10 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
 
-	// create RDS master password secret
-	rdsMasterPasswordSecret := k8s.GetRdsMasterSecret(*jira, namespace.Name)
-	err = r.Create(context.TODO(), &rdsMasterPasswordSecret)
+	// create database secret which crossplane, liquibase and Jira will use
+	rdsSecret := k8s.GetRdsSecret(*jira, "replaceme", namespace.Name)
+	err = r.Create(context.TODO(), &rdsSecret)
+
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return ctrl.Result{RequeueAfter: time.Minute}, err
 	}
@@ -131,7 +135,18 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// at this point we should have RDS endpoint, let's update Jira custom resource status with it
+	// at this point we should have RDS endpoint, let's update database secret and Jira custom resource status with it
+	existingRdsSecretData, err := r.getSecretData(rdsSecret)
+	rdsHostnameInSecret := string(existingRdsSecretData["hostname"])
+	if rdsHostnameInSecret != rdsHostname {
+		rdsSecret := k8s.GetRdsSecret(*jira, rdsHostname, namespace.Name)
+		logger.Info("Updating RDS hostname in jira-database-secret:" + rdsHostname)
+		err = r.Client.Update(context.TODO(), &rdsSecret)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+		}
+	}
+
 	existingRdsStatusEndpoint := jira.Status.RDS.Endpoint
 	if existingRdsStatusEndpoint != rdsHostname {
 		jira.Status.RDS.Endpoint = rdsHostname
@@ -158,7 +173,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
 		}
 
-		jobSucceededReplicas, err := r.getJobSucceededReplicas(changeRootPasswordJob, changeRootPasswordJob.Name, namespace.Name)
+		jobSucceededReplicas, err := r.getJobSucceededReplicas(changeRootPasswordJob)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 		}
@@ -173,36 +188,30 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	// create secret with app JDBC info
-	jiraDatabaseSecret := k8s.GetJiraUserRdsSecret(*jira, namespace.Name, rdsHostname)
-	err = r.Create(context.TODO(), &jiraDatabaseSecret)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return ctrl.Result{RequeueAfter: time.Minute}, err
-	}
-
-	// create liquibase secret; first we need to get master and app user jdbc passwords from existing secrets
-	err = r.Get(context.TODO(), client.ObjectKey{Name: jira.Name + "-rds-master-password", Namespace: namespace.Name}, &rdsMasterPasswordSecret)
-	masterPassword := rdsMasterPasswordSecret.Data["password"]
-	err = r.Get(context.TODO(), client.ObjectKey{Name: jira.Name + "-jira-database-secret", Namespace: namespace.Name}, &jiraDatabaseSecret)
-	appUserJDBCPassword := jiraDatabaseSecret.Data["password"]
-
-	// get secret definition and create it
-	liquibaseSecret := k8s.GetLiquibaseSecret(*jira, namespace.Name, rdsHostname, masterPassword, appUserJDBCPassword)
-	err = r.Create(context.TODO(), &liquibaseSecret)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return ctrl.Result{RequeueAfter: time.Minute}, err
-	}
-
 	// get liquibase changelog configmap definition and create it
-	// requeue after 10 mins because most likely changelog file does not exist
 	liquibaseConfigMap, err := k8s.GetLiquibaseConfigMap(*jira, namespace.Name)
 	if err != nil {
 		logger.Error(err, "Failed to read liquibase changelog file")
 		return ctrl.Result{RequeueAfter: 10 * time.Minute}, err
 	}
 	err = r.Create(context.TODO(), &liquibaseConfigMap)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
+
+	if errors.IsAlreadyExists(err) {
+		existingLiquibaseConfigMapData, err := r.getConfigMapData(liquibaseConfigMap)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+		}
+		cmData := existingLiquibaseConfigMapData["changelog.yml"]
+
+		if cmData != liquibaseConfigMap.Data["changelog.yml"] {
+			logger.Info("Updating Liquibase changelog ConfigMap")
+			err = r.Client.Update(context.TODO(), &liquibaseConfigMap)
+			if err != nil {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+			}
+		}
+	} else if err != nil {
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, err
 	}
 
 	// create liquibase job
@@ -212,7 +221,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
 	}
 
-	liquibaseJobSucceededReplicas, err := r.getJobSucceededReplicas(liquibaseJob, liquibaseJob.Name, namespace.Name)
+	liquibaseJobSucceededReplicas, err := r.getJobSucceededReplicas(liquibaseJob)
 	if err != nil {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
@@ -228,7 +237,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 
-	if jira.Spec.SharedFS.SnapshotId != "" {
+	if jira.Spec.SharedFS.Ebs.SnapshotId != "" {
 		// create EBS volume from a snapshot
 		ebsVolume := crossplane.GetEbsVolume(*jira)
 		err = r.Create(context.TODO(), &ebsVolume)
@@ -254,7 +263,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		// create nfs-server PersistentVolumeClaim
-		nfsPersistentVolumeClaim := k8s.GetPersistentVolumeClaim(*jira, jira.Name+"-nfs-server", namespace.Name, jira.Name+"-nfs-server", jira.Spec.SharedFS.EbsStorageClassName, strconv.Itoa(int(jira.Spec.SharedFS.VolumeSize)), corev1.ReadWriteOnce)
+		nfsPersistentVolumeClaim := k8s.GetPersistentVolumeClaim(*jira, jira.Name+"-nfs-server", namespace.Name, nfsPersistentVolume.Name, jira.Spec.SharedFS.Ebs.EbsStorageClassName, strconv.Itoa(int(jira.Spec.SharedFS.VolumeSize)), corev1.ReadWriteOnce)
 		err = r.Create(context.TODO(), &nfsPersistentVolumeClaim)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
@@ -268,7 +277,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		// get nfs server svc cluster IP
-		nfsServerIp, err := r.getSvcClusterIp(nfsServerService, nfsServerService.Name, namespace.Name)
+		nfsServerIp, err := r.getSvcClusterIp(nfsServerService)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 		}
@@ -286,7 +295,7 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		// get nfs-server statefulset status
-		nfsReadyReplicas, err := r.getStsReadyReplicas(nfsServerStatefulSet, nfsServerStatefulSet.Name, namespace.Name)
+		nfsReadyReplicas, err := r.getStsReadyReplicas(nfsServerStatefulSet)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 		}
@@ -304,14 +313,72 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 		// create jira shared home pvc bound to nfs shared home pv
 		sharedHomePvcAccessMode := corev1.ReadWriteMany
-		efsPersistentVolumeClaim := k8s.GetPersistentVolumeClaim(*jira, "jira-shared-home", namespace.Name, jiraSharedHomeNfsPv.Name, jira.Spec.SharedFS.EfsStorageClassName, strconv.Itoa(int(jira.Spec.SharedFS.VolumeSize)), sharedHomePvcAccessMode)
-		err = r.Create(context.TODO(), &efsPersistentVolumeClaim)
+		jiraSharedHomePvcNfs := k8s.GetPersistentVolumeClaim(*jira, "jira-shared-home", namespace.Name, jiraSharedHomeNfsPv.Name, jira.Spec.SharedFS.Efs.EfsStorageClassName, strconv.Itoa(int(jira.Spec.SharedFS.VolumeSize)), sharedHomePvcAccessMode)
+		err = r.Create(context.TODO(), &jiraSharedHomePvcNfs)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 		}
 
+		currentEbsId := jira.Status.SharedFilesystemStatus.EbsId
+		if currentEbsId != ebsVolumeId {
+			logger.Info("Updating Jira status with EBS ID: " + ebsVolumeId)
+			jira.Status.SharedFilesystemStatus.EbsId = ebsVolumeId
+			err = r.Status().Update(context.TODO(), jira)
+			if err != nil {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+			}
+		}
+
+	} else if jira.Spec.SharedFS.Fsx.SnapshotId != "" {
+
+		// create VolumeSnapshot from existing vol handle
+
+		volumeSnapshotContent := k8s.GetFsxVolumeSnapshotContent(*jira, namespace.Name)
+		err = r.Create(context.TODO(), &volumeSnapshotContent)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		volumeSnapshot := k8s.GetFsxVolumeSnapshot(*jira, namespace.Name)
+		err = r.Create(context.TODO(), &volumeSnapshot)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		fsxPvc := k8s.GetFsxPersistentVolumeClaimFromSnapshot(*jira, "jira-shared-home", namespace.Name, "1")
+		err = r.Create(context.TODO(), &fsxPvc)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		fsxPvcStatus, err := r.getPvcStatus(fsxPvc)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		if fsxPvcStatus != "Bound" {
+			logger.Info("Waiting for FSX PVC jira-shared-home to be in Bound state. Current status: " + fsxPvcStatus)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		}
+
+		fsxVolumeName, err := r.getFsxVolumeName(fsxPvc)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		currentFsxId := jira.Status.SharedFilesystemStatus.FsxId
+
+		if currentFsxId != fsxVolumeName {
+			logger.Info("Updating Jira status with FSX volume: " + fsxVolumeName)
+			jira.Status.SharedFilesystemStatus.FsxId = fsxVolumeName
+			err = r.Status().Update(context.TODO(), jira)
+			if err != nil {
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, err
+			}
+		}
+
 	} else {
-		// create EFS
+		// create a new EFS
 		sharedFileSystem := crossplane.GetFileSystem(*jira, namespace.Name)
 		err = r.Create(context.TODO(), &sharedFileSystem)
 		if err != nil && !errors.IsAlreadyExists(err) {
@@ -353,10 +420,20 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 
 		sharedHomePvcAccessMode := corev1.ReadWriteMany
-		efsPersistentVolumeClaim := k8s.GetPersistentVolumeClaim(*jira, "jira-shared-home", namespace.Name, efsPersistentVolume.Name, jira.Spec.SharedFS.EfsStorageClassName, "10", sharedHomePvcAccessMode)
+		efsPersistentVolumeClaim := k8s.GetPersistentVolumeClaim(*jira, "jira-shared-home", namespace.Name, efsPersistentVolume.Name, jira.Spec.SharedFS.Efs.EfsStorageClassName, "10", sharedHomePvcAccessMode)
 		err = r.Create(context.TODO(), &efsPersistentVolumeClaim)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+
+		currentEfsId := jira.Status.SharedFilesystemStatus.EfsId
+		if currentEfsId != *fileSystemId {
+			logger.Info("Updating Jira status with EFS ID: " + *fileSystemId)
+			jira.Status.SharedFilesystemStatus.EfsId = *fileSystemId
+			err = r.Status().Update(context.TODO(), jira)
+			if err != nil {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+			}
 		}
 	}
 
@@ -410,8 +487,13 @@ func (r *JiraReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
-	// do not requeue until one of the watched resources changes
-	return ctrl.Result{}, nil
+	// requeue if app is not yet healthy
+	if string(healthStatus) != "Healthy" {
+		logger.Info("Application is not yet healthy. Current status: " + string(healthStatus))
+	}
+
+	// end of reconciliation loop
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -420,11 +502,14 @@ func (r *JiraReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&appv1.Jira{}).
 		Owns(&corev1.Namespace{}).
 		Owns(&corev1.Secret{}).
-		Owns(&corev1.Pod{}).
+		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&database.RDSInstance{}).
 		Owns(&database.DBSubnetGroup{}).
 		Owns(&rds.DBParameterGroup{}).
 		Owns(&ec2.Volume{}).
+		Owns(&efs.FileSystem{}).
+		Owns(&snapshot.VolumeSnapshot{}).
+		Owns(&snapshot.VolumeSnapshotContent{}).
 		Complete(r)
 }

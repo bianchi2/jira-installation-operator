@@ -59,8 +59,8 @@ func (r *JiraReconciler) getRdsEndpoint(rdsInstance database.RDSInstance, rdsObj
 	return endpoint, nil
 }
 
-func (r *JiraReconciler) getPodStatus(pod corev1.Pod, podName string, namespace string) (status string, err error) {
-	err = r.Get(context.TODO(), client.ObjectKey{Name: podName, Namespace: namespace}, &pod)
+func (r *JiraReconciler) getPodStatus(pod corev1.Pod) (status string, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: pod.Name, Namespace: pod.Namespace}, &pod)
 	if err != nil {
 		return "", err
 	}
@@ -68,8 +68,8 @@ func (r *JiraReconciler) getPodStatus(pod corev1.Pod, podName string, namespace 
 	return status, nil
 }
 
-func (r *JiraReconciler) getJobSucceededReplicas(job batchv1.Job, jobName string, namespace string) (replicas int32, err error) {
-	err = r.Get(context.TODO(), client.ObjectKey{Name: jobName, Namespace: namespace}, &job)
+func (r *JiraReconciler) getJobSucceededReplicas(job batchv1.Job) (replicas int32, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: job.Name, Namespace: job.Namespace}, &job)
 	if err != nil {
 		return replicas, err
 	}
@@ -77,8 +77,8 @@ func (r *JiraReconciler) getJobSucceededReplicas(job batchv1.Job, jobName string
 	return replicas, nil
 }
 
-func (r *JiraReconciler) getSvcClusterIp(svc corev1.Service, name string, namespace string) (ip string, err error) {
-	err = r.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, &svc)
+func (r *JiraReconciler) getSvcClusterIp(svc corev1.Service) (ip string, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: svc.Name, Namespace: svc.Namespace}, &svc)
 	if err != nil {
 		return ip, err
 	}
@@ -86,11 +86,61 @@ func (r *JiraReconciler) getSvcClusterIp(svc corev1.Service, name string, namesp
 	return ip, nil
 }
 
-func (r *JiraReconciler) getStsReadyReplicas(sts appsv1.StatefulSet, name string, namespace string) (readyReplicas int32, err error) {
-	err = r.Get(context.TODO(), client.ObjectKey{Name: name, Namespace: namespace}, &sts)
+func (r *JiraReconciler) getStsReadyReplicas(sts appsv1.StatefulSet) (readyReplicas int32, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: sts.Name, Namespace: sts.Namespace}, &sts)
 	if err != nil {
 		return 0, err
 	}
 	readyReplicas = sts.Status.ReadyReplicas
 	return readyReplicas, nil
+}
+
+func (r *JiraReconciler) getPvcStatus(pvc corev1.PersistentVolumeClaim) (status string, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: pvc.Name, Namespace: pvc.Namespace}, &pvc)
+	if err != nil {
+		return "", err
+	}
+	status = string(pvc.Status.Phase)
+	return status, nil
+}
+
+func (r *JiraReconciler) getPvByName(name string) (pv corev1.PersistentVolume, err error) {
+	pv = corev1.PersistentVolume{}
+	err = r.Get(context.TODO(), client.ObjectKey{Name: name}, &pv)
+	if err != nil {
+		return pv, err
+	}
+	return pv, nil
+}
+
+func (r *JiraReconciler) getSecretData(secret corev1.Secret) (secretData map[string][]byte, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: secret.Name, Namespace: secret.Namespace}, &secret)
+	if err != nil {
+		return secretData, err
+	}
+	secretData = secret.Data
+	return secretData, nil
+}
+
+func (r *JiraReconciler) getConfigMapData(cm corev1.ConfigMap) (configMapData map[string]string, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, &cm)
+	if err != nil {
+		return configMapData, err
+	}
+	configMapData = cm.Data
+	return configMapData, nil
+}
+
+func (r *JiraReconciler) getFsxVolumeName(pvc corev1.PersistentVolumeClaim) (fsxVolumeName string, err error) {
+	err = r.Get(context.TODO(), client.ObjectKey{Name: pvc.Name, Namespace: pvc.Namespace}, &pvc)
+	if err != nil {
+		return "", err
+	}
+	k8sPvName := pvc.Spec.VolumeName
+	pv, err := r.getPvByName(k8sPvName)
+	if err != nil {
+		return "", err
+	}
+	fsxVolumeName = pv.Spec.CSI.VolumeHandle
+	return fsxVolumeName, nil
 }

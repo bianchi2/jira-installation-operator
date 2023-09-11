@@ -6,9 +6,10 @@ metadata:
   ownerReferences:
   - apiVersion: app.atlassian.com/v1
     blockOwnerDeletion: true
+    controller: true
     kind: Jira
     name: jira-clone
-    uid: 9e39938e-a051-426b-b934-ff67381aebdc
+    uid: 0da55702-0b74-4fd0-b55e-a36e794a87e2
 spec:
   generators:
   - list:
@@ -30,10 +31,10 @@ spec:
           helm:
             releaseName: '{{ namespace }}'
             values: |
-                hello:
-                  world:
-                    foo: bar
-                myNewValue: isAwesomeAsHell
+                volumes:
+                  sharedHome:
+                    nfsPermissionFixer:
+                      enabled: false
                 ingress:
                     host: test-clone-apse2.itplatdev.atlassian.com
                     annotations:

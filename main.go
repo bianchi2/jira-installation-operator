@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	ec2 "github.com/crossplane-contrib/provider-aws/apis/ec2/v1alpha1"
+	snapshot "github.com/kubernetes-csi/external-snapshotter/client/v6/apis/volumesnapshot/v1"
 	"os"
 
 	appv1 "github.com/atlassian-labs/jira-operator/api/v1"
@@ -49,6 +50,7 @@ func init() {
 	utilruntime.Must(database.SchemeBuilder.AddToScheme(scheme))
 	utilruntime.Must(efs.AddToScheme(scheme))
 	utilruntime.Must(ec2.AddToScheme(scheme))
+	utilruntime.Must(snapshot.AddToScheme(scheme))
 	utilruntime.Must(appv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }

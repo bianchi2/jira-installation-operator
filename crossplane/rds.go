@@ -27,7 +27,7 @@ func GetRdsInstance(jira appv1.Jira, dbSubnetGroup database.DBSubnetGroup, dbPar
 		MasterUsername:       aws.String("postgres"),
 		MasterPasswordSecretRef: &xpv1.SecretKeySelector{
 			SecretReference: xpv1.SecretReference{
-				Name:      jira.Name + "-rds-master-password",
+				Name:      "jira-database-secret",
 				Namespace: namespace,
 			},
 			Key: "password",
@@ -53,7 +53,7 @@ func GetRdsInstance(jira appv1.Jira, dbSubnetGroup database.DBSubnetGroup, dbPar
 			Namespace: namespace,
 		},
 		ProviderConfigReference: &v1.Reference{
-			Name: "crossplane-contrib-provider-aws",
+			Name: jira.Spec.CrossplaneAwsProviderName,
 		},
 	}
 
@@ -89,7 +89,7 @@ func GetDbSubnetGroup(jira appv1.Jira) (dbSubnetGroup database.DBSubnetGroup) {
 			},
 			ResourceSpec: xpv1.ResourceSpec{
 				ProviderConfigReference: &v1.Reference{
-					Name: "crossplane-contrib-provider-aws",
+					Name: jira.Spec.CrossplaneAwsProviderName,
 				},
 			},
 		},
@@ -107,7 +107,7 @@ func GetDbParameterGroup(jira appv1.Jira) (dbParameterGroup rds.DBParameterGroup
 		Spec: rds.DBParameterGroupSpec{
 			ResourceSpec: xpv1.ResourceSpec{
 				ProviderConfigReference: &v1.Reference{
-					Name: "crossplane-contrib-provider-aws",
+					Name: jira.Spec.CrossplaneAwsProviderName,
 				},
 			},
 			ForProvider: rds.DBParameterGroupParameters{

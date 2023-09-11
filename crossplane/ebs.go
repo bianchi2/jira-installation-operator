@@ -18,7 +18,7 @@ func GetEbsVolume(jira appv1.Jira) (ebsVolume ec2.Volume) {
 
 	ebsResourceSpec := xpv1.ResourceSpec{
 		ProviderConfigReference: &v1.Reference{
-			Name: "crossplane-contrib-provider-aws",
+			Name: jira.Spec.CrossplaneAwsProviderName,
 		},
 	}
 
@@ -35,10 +35,10 @@ func GetEbsVolume(jira appv1.Jira) (ebsVolume ec2.Volume) {
 			ResourceSpec: ebsResourceSpec,
 			ForProvider: ec2.VolumeParameters{
 				Region:           jira.Spec.AWSRegion,
-				AvailabilityZone: aws.String(jira.Spec.AWSRegion + jira.Spec.SharedFS.NfsServerAvailabilityZone),
+				AvailabilityZone: aws.String(jira.Spec.AWSRegion + jira.Spec.SharedFS.Ebs.AvailabilityZone),
 				Encrypted:        &encrypted,
 				Size:             &jira.Spec.SharedFS.VolumeSize,
-				SnapshotID:       &jira.Spec.SharedFS.SnapshotId,
+				SnapshotID:       &jira.Spec.SharedFS.Ebs.SnapshotId,
 				TagSpecifications: []*ec2.TagSpecification{
 					{
 						ResourceType: aws.String("volume"),

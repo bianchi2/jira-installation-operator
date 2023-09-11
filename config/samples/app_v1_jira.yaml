@@ -10,9 +10,15 @@ spec:
   retainOnDelete: true
   hostname: test-clone-apse2.itplatdev.atlassian.com
   kmsKeyId: 069a2a74-a9c7-46f2-a395-87c11c86a5e1
+  # IAM role to allow reset RDS root password
+  rdsRoleArn: arn:aws:iam::629205377521:role/reset-rds-password
   sharedFs:
-    snapshotId: snap-0de48debdaa7df9fd
+    # applicable only to EBS volumes
     volumeSize: 2
+    fsx:
+      snapshotId: fsvolsnap-0a3c8d01569db5c9a
+#    ebs:
+#      snapshotId: snap-05d794c50477a9588
   database:
     dBInstanceClass: db.t3.small
     allocatedStorage: 20
@@ -27,6 +33,7 @@ spec:
       - subnet-021a6490249d5fd60
       - subnet-0db32574128feec29
   argocd:
+    # if
     retainOnDelete: false
     namespace: argocd
     project: default
@@ -45,7 +52,7 @@ spec:
         - $values/values/products/jira/stacks/k8spartez-usw2/version.yaml
         - $values/values/products/jira/stacks/k8spartez-usw2/additional-envs.yaml
       valueOverrides: |
-        hello:
-          world:
-            foo: bar
-        myNewValue: isAwesomeAsHell
+        volumes:
+          sharedHome:
+            nfsPermissionFixer:
+              enabled: false

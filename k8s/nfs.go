@@ -57,6 +57,28 @@ func GetNfsServerStatefulSet(jira appv1.Jira, namespace string) (sts appsv1.Stat
 					},
 				},
 				Spec: corev1.PodSpec{
+					TerminationGracePeriodSeconds: aws.Int64(0),
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: []corev1.NodeSelectorTerm{
+								{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "topology.kubernetes.io/zone",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{jira.Spec.AWSRegion + jira.Spec.SharedFS.Ebs.AvailabilityZone},
+										},
+										{
+											Key:      "topology.kubernetes.io/region",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{jira.Spec.AWSRegion},
+										},
+									},
+								},
+							},
+							},
+						},
+					},
 					Volumes: []corev1.Volume{
 						{
 							Name: "data",

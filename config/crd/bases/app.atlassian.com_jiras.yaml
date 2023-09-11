@@ -48,24 +48,49 @@ spec:
               sharedFs:
                 type: object
                 properties:
-                  snapshotId:
-                    type: string
                   volumeSize:
                     type: integer
                     default: 100
-                  nfsServerAvailabilityZone:
-                    type: string
-                    default: a
-                  efsStorageClassName:
-                    type: string
-                    default: efs-sc
-                  ebsStorageClassName:
-                    type: string
-                    default: gp2
-                  efsCsiDriverName:
-                    type: string
-                    default: efs.csi.aws.com
+                  efs:
+                    type: object
+                    properties:
+                      storageClassName:
+                        type: string
+                        default: efs-sc
+                      csiDriverName:
+                        type: string
+                        default: efs.csi.aws.com
+                  ebs:
+                    type: object
+                    properties:
+                      storageClassName:
+                        type: string
+                        default: gp2
+                      fsType:
+                        type: string
+                        default: xfs
+                      snapshotId:
+                        type: string
+                      availabilityZone:
+                        type: string
+                        default: a
+                  fsx:
+                    type: object
+                    properties:
+                      restoreStorageClassName:
+                        type: string
+                        default: fsx-sc-restore
+                      volumeSnapshotClassName:
+                        type: string
+                        default: fsx-snapshot-class
+                      snapshotId:
+                        type: string
+                      csiDriverName:
+                        type: string
+                        default: fsx.openzfs.csi.aws.com
               kmsKeyId:
+                type: string
+              rdsRoleArn:
                 type: string
               database:
                 type: object
@@ -130,7 +155,9 @@ spec:
                         type: boolean
                   retainOnDelete:
                     type: boolean
-
+              crossplaneAwsProviderName:
+                type: string
+                default: aws-provider
 
             type: object
           status:
@@ -148,7 +175,15 @@ spec:
                     type: string
                   status:
                     type: string
-
+              sharedFs:
+                type: object
+                properties:
+                  efsId:
+                    type: string
+                  ebsId:
+                    type: string
+                  fsxId:
+                    type: string
               app:
                 type: object
                 properties:

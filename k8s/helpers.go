@@ -50,6 +50,7 @@ func GetOwnerReferences(jira appv1.Jira) (ownerReferences []metav1.OwnerReferenc
 			Name:               jira.Name,
 			UID:                jira.UID,
 			BlockOwnerDeletion: &blockOwnerDeletion,
+			Controller:         aws.Bool(true),
 		},
 	}
 	return ownerReferences
